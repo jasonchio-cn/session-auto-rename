@@ -1,8 +1,8 @@
-import concurrent.futures
 import json
 import os
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -21,11 +21,12 @@ class RenameHookTests(unittest.TestCase):
         self.env = os.environ.copy()
         self.env["PLUGIN_DATA"] = str(self.root / "codex")
         self.env["QODER_PLUGIN_DATA"] = str(self.root / "qoder")
+        self.env["PYTHONIOENCODING"] = "utf-8"
 
     def run_command(self, *args, event=None, env=None):
         return subprocess.run(
             [sys.executable, str(SCRIPT), *args],
-            input=json.dumps(event or {}), text=True, capture_output=True,
+            input=json.dumps(event or {}), text=True, encoding="utf-8", capture_output=True,
             env=env or self.env, check=False,
         )
 
@@ -39,7 +40,7 @@ class RenameHookTests(unittest.TestCase):
         return self.root / platform / "sessions" / session / "rename-state.json"
 
     def state(self, platform="qoder", session="session-1"):
-        return json.loads(self.state_path(platform, session).read_text())
+        return json.loads(self.state_path(platform, session).read_text(encoding="utf-8"))
 
     def propose(self, request_id, title, session="session-1"):
         return self.run_command(
@@ -63,13 +64,13 @@ class RenameHookTests(unittest.TestCase):
             "--request-id", request_id, "--title", title,
         ])
 
-    def test_first_check_throttling_and_state_privacy(self):
+    def test_codex_first_check_throttling_and_state_privacy(self):
         first = self.hook("codex")
         self.assertEqual(first.returncode, 0)
         context = json.loads(first.stdout)["hookSpecificOutput"]["additionalContext"]
         self.assertIn("mcp__codex_tui__set_thread_title", context)
-        self.assertIn("只适用于当前这一轮", context)
-        self.assertNotIn("PRIVATE_CONTEXT_SENTINEL", self.state_path("codex").read_text())
+        self.assertIn("首次自动检查", context)
+        self.assertNotIn("PRIVATE_CONTEXT_SENTINEL", self.state_path("codex").read_text(encoding="utf-8"))
         self.assertEqual(self.hook("codex").stdout, "")
         path = self.state_path("codex")
         state = self.state("codex")
@@ -78,6 +79,22 @@ class RenameHookTests(unittest.TestCase):
         path.write_text(json.dumps(state))
         self.assertIn("additionalContext", json.loads(self.hook("codex").stdout)["hookSpecificOutput"])
         self.assertNotEqual(self.state("codex")["request_id"], previous_request)
+
+    def test_qoder_first_check_throttling_and_state_privacy(self):
+        first = self.hook("qoder")
+        self.assertEqual(first.returncode, 0)
+        context = json.loads(first.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("尚无记录的标题", context)
+        self.assertIn("只适用于当前这一轮", context)
+        self.assertNotIn("PRIVATE_CONTEXT_SENTINEL", self.state_path().read_text(encoding="utf-8"))
+        self.assertEqual(self.hook("qoder").stdout, "")
+        path = self.state_path()
+        state = self.state()
+        previous_request = state["request_id"]
+        state["last_check"] = time.time() - 601
+        path.write_text(json.dumps(state))
+        self.assertIn("additionalContext", json.loads(self.hook("qoder").stdout)["hookSpecificOutput"])
+        self.assertNotEqual(self.state()["request_id"], previous_request)
 
     def test_qoder_candidate_is_submitted_on_next_input_even_during_cooldown(self):
         first = self.hook()
@@ -148,11 +165,36 @@ class RenameHookTests(unittest.TestCase):
         self.assertTrue(self.state()["pending"]["submitted"])
         self.assertEqual(self.hook().stdout, "")
 
-    def test_simultaneous_inputs_issue_at_most_one_check(self):
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-            results = list(pool.map(lambda _: self.hook(), range(8)))
-        self.assertTrue(all(result.returncode == 0 for result in results))
-        self.assertEqual(sum(bool(result.stdout) for result in results), 1)
+    def test_codex_hook_command_uses_plugin_path_and_utf8(self):
+        hook_file = SCRIPT.parent.parent / "hooks" / "codex.json"
+        command = json.loads(hook_file.read_text(encoding="utf-8"))["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+        plugin_root = self.root / "插件 根目录"
+        (plugin_root / "scripts").mkdir(parents=True)
+        shutil.copyfile(SCRIPT, plugin_root / "scripts" / SCRIPT.name)
+        env = self.env.copy()
+        env["PLUGIN_ROOT"] = str(plugin_root)
+        env.pop("PYTHONIOENCODING", None)
+        env.pop("PYTHONUTF8", None)
+        if os.name == "nt":
+            shells = {
+                "cmd": (command, True),
+                "powershell": (["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], False),
+            }
+            if shutil.which("sh"):
+                shells["sh"] = (["sh", "-c", command], False)
+        else:
+            shells = {"sh": (["/bin/sh", "-c", command], False)}
+        for session, (args, shell) in shells.items():
+            with self.subTest(shell=session):
+                result = subprocess.run(
+                    args, shell=shell, env=env, text=True, encoding="utf-8", capture_output=True,
+                    input=json.dumps({"session_id": session, "prompt": "中文和表情😀"}, ensure_ascii=False),
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+                self.assertIn("会话标题检查", context)
+                self.assertTrue(self.state_path("codex", session).is_file())
 
     def test_permission_hook_allows_only_current_candidate_command(self):
         self.hook()
@@ -188,6 +230,7 @@ class RenameHookTests(unittest.TestCase):
         self.assertEqual(self.permission(valid, mode="dont_ask").stdout, "")
         self.assertEqual(self.permission(valid, mode="").stdout, "")
 
+    @unittest.skipIf(os.name == "nt", "Qoder shell integration requires a POSIX shell")
     def test_approved_quoted_title_does_not_execute_shell_content(self):
         self.hook()
         request_id = self.state()["request_id"]

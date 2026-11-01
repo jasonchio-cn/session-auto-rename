@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/scripts/rename_hook.py\" hook codex",
+            "command": "python3 -X utf8 -c \"import os,runpy;runpy.run_path(os.path.join(os.environ['PLUGIN_ROOT'],'scripts','rename_hook.py'),run_name='__main__')\" hook codex",
             "timeout": 5
           }
         ]

@@ -2,8 +2,6 @@
 """Throttle title checks and exchange Qoder title candidates through plugin data."""
 
 import argparse
-import contextlib
-import fcntl
 import json
 import os
 from pathlib import Path
@@ -20,17 +18,6 @@ INTERVAL_SECONDS = 600
 SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
 REQUEST_ID = re.compile(r"[a-f0-9]{32}\Z")
 STATE_FILE = "rename-state.json"
-
-
-@contextlib.contextmanager
-def locked_state(path):
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fd = os.open(path.parent / ".rename-state.lock", os.O_CREAT | os.O_RDWR, 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        yield
-    finally:
-        os.close(fd)
 
 
 def read_state(path):
@@ -67,6 +54,7 @@ def read_state(path):
 
 
 def write_state(path, state):
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=".rename-state-", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as target:
@@ -128,32 +116,31 @@ def run_hook(platform, event, environ, now, output):
     if not data_dir or not Path(data_dir).is_absolute():
         return
     state_path = Path(data_dir) / "sessions" / session_id / STATE_FILE
-    with locked_state(state_path):
-        state = read_state(state_path)
-        pending = state.get("pending") if platform == "qoder" else None
-        submit = pending is not None and not pending["submitted"] and bool(pending["title"])
-        first_check = "last_check" not in state
-        due = first_check or now - state["last_check"] >= INTERVAL_SECONDS
-        result = {"hookEventName": "UserPromptSubmit"}
-        if submit:
-            result["sessionTitle"] = pending["title"]
-        if due:
-            request_id = secrets.token_hex(16)
-            state["last_check"] = now
-            state["request_id"] = request_id
-            write_state(state_path, state)
-            previous_title = pending["title"] if pending else None
-            result["additionalContext"] = title_instruction(
-                platform, state_path, request_id, first_check, previous_title,
-            )
-        if not submit and not due:
-            return
-        json.dump({"hookSpecificOutput": result}, output, ensure_ascii=False)
-        output.write("\n")
-        output.flush()
-        if submit:
-            pending["submitted"] = True
-            write_state(state_path, state)
+    state = read_state(state_path)
+    pending = state.get("pending") if platform == "qoder" else None
+    submit = pending is not None and not pending["submitted"] and bool(pending["title"])
+    first_check = "last_check" not in state
+    due = first_check or now - state["last_check"] >= INTERVAL_SECONDS
+    result = {"hookEventName": "UserPromptSubmit"}
+    if submit:
+        result["sessionTitle"] = pending["title"]
+    if due:
+        request_id = secrets.token_hex(16)
+        state["last_check"] = now
+        state["request_id"] = request_id
+        write_state(state_path, state)
+        previous_title = pending["title"] if pending else None
+        result["additionalContext"] = title_instruction(
+            platform, state_path, request_id, first_check, previous_title,
+        )
+    if not submit and not due:
+        return
+    json.dump({"hookSpecificOutput": result}, output, ensure_ascii=False)
+    output.write("\n")
+    output.flush()
+    if submit:
+        pending["submitted"] = True
+        write_state(state_path, state)
 
 
 def propose(state_path, request_id, title):
@@ -167,14 +154,13 @@ def propose(state_path, request_id, title):
     if not title:
         raise ValueError("empty title")
     title = title[:80]
-    with locked_state(state_path):
-        state = read_state(state_path)
-        if state.get("request_id") != request_id:
-            raise ValueError("stale request")
-        if (state.get("pending") or {}).get("request_id") == request_id:
-            raise ValueError("candidate already recorded")
-        state["pending"] = {"title": title, "submitted": False, "request_id": request_id}
-        write_state(state_path, state)
+    state = read_state(state_path)
+    if state.get("request_id") != request_id:
+        raise ValueError("stale request")
+    if (state.get("pending") or {}).get("request_id") == request_id:
+        raise ValueError("candidate already recorded")
+    state["pending"] = {"title": title, "submitted": False, "request_id": request_id}
+    write_state(state_path, state)
 
 
 def permit_qoder(event, environ, output):
@@ -211,12 +197,11 @@ def permit_qoder(event, environ, output):
         return
     if arguments[5] != "--request-id" or not REQUEST_ID.fullmatch(arguments[6]) or arguments[7] != "--title":
         return
-    with locked_state(state_path):
-        state = read_state(state_path)
-        if state.get("request_id") != arguments[6]:
-            return
-        if (state.get("pending") or {}).get("request_id") == arguments[6]:
-            return
+    state = read_state(state_path)
+    if state.get("request_id") != arguments[6]:
+        return
+    if (state.get("pending") or {}).get("request_id") == arguments[6]:
+        return
     json.dump({"hookSpecificOutput": {
         "hookEventName": "PermissionRequest", "decision": {"behavior": "allow"},
     }}, output)
