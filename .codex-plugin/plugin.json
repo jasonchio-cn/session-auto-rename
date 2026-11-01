@@ -1,0 +1,33 @@
+{
+  "name": "session-auto-rename",
+  "version": "0.1.6",
+  "description": "仅支持 Codex 和 Qoder CLI 的会话标题自动更新。",
+  "author": {
+    "name": "承坤"
+  },
+  "repository": "https://github.com/jasonchio-cn/session-auto-rename",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "qoder",
+    "session",
+    "title"
+  ],
+  "hooks": "./hooks/codex.json",
+  "interface": {
+    "displayName": "会话标题自动更新",
+    "shortDescription": "根据当前工作更新会话标题",
+    "longDescription": "根据会话中的主要工作检查并更新标题。Codex 需要宿主提供会话改名工具；Qoder CLI 会在下一次用户输入时提交候选标题。",
+    "developerName": "承坤",
+    "category": "Productivity",
+    "capabilities": [
+      "检查会话主题",
+      "更新会话标题"
+    ],
+    "defaultPrompt": [
+      "根据当前主要工作更新会话标题。"
+    ],
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/icon.svg"
+  }
+}

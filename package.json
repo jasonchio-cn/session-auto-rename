@@ -1,0 +1,19 @@
+{
+  "name": "session-auto-rename",
+  "version": "0.1.6",
+  "description": "仅支持 Codex 和 Qoder CLI 的会话标题自动更新。",
+  "license": "MIT",
+  "files": [
+    ".codex-plugin",
+    ".qoder-plugin",
+    "assets",
+    "hooks",
+    "scripts",
+    "LICENSE",
+    "CHANGELOG.md",
+    "README.md",
+    "!**/__pycache__/**",
+    "!**/*.pyc",
+    "!**/.DS_Store"
+  ]
+}

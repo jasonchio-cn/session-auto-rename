@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_ROOT}/scripts/rename_hook.py\" hook codex",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

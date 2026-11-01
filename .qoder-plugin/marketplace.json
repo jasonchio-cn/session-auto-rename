@@ -1,0 +1,21 @@
+{
+  "name": "session-auto-rename",
+  "owner": {
+    "name": "承坤"
+  },
+  "plugins": [
+    {
+      "name": "session-auto-rename",
+      "source": "./",
+      "version": "0.1.6",
+      "description": "仅支持 Codex 和 Qoder CLI 的会话标题自动更新。",
+      "category": "Productivity",
+      "tags": [
+        "codex",
+        "qoder",
+        "session",
+        "title"
+      ]
+    }
+  ]
+}

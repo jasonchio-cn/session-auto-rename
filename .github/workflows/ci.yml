@@ -1,0 +1,28 @@
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: python3 -m unittest discover -s tests -v
+      - name: Test Codex marketplace installation
+        run: |
+          npm install --global @openai/codex@0.166.0
+          codex plugin marketplace add .
+          codex plugin add session-auto-rename@session-auto-rename --json
+      - name: Validate Qoder plugin
+        run: |
+          npm install --global @qoder-ai/qodercli@1.1.81
+          qodercli plugins validate . --strict

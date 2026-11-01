@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${QODER_PLUGIN_ROOT}/scripts/rename_hook.py\" hook qoder",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${QODER_PLUGIN_ROOT}/scripts/rename_hook.py\" permit-qoder",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
