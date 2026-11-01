@@ -38,7 +38,19 @@ qodercli plugins install session-auto-rename@session-auto-rename
 
 Codex 安装后，在 `/hooks` 中审核并信任本插件的 Hook。Qoder 安装后重启 CLI 或运行 `/plugins reload`。
 
-更新市场后，再按客户端的插件管理方式更新插件。停用时可使用客户端的插件管理入口。
+更新插件：
+
+```bash
+# Codex
+codex plugin marketplace upgrade session-auto-rename
+codex plugin add session-auto-rename@session-auto-rename
+
+# Qoder CLI
+qodercli plugins marketplace update session-auto-rename
+qodercli plugins update session-auto-rename@session-auto-rename
+```
+
+停用时可使用客户端的插件管理入口。
 
 ## 状态和限制
 
